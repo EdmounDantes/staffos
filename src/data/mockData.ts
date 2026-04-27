@@ -1,4 +1,5 @@
 import { User, WorkItem, Incident, Shift, Department, LeaveRequest, Training, ProcurementRequest, Notification, OrgNode, FormDefinition } from '../types';
+import { taskLocationOptions } from './taskLocations';
 
 export const mockUser: User = {
   id: 'u1',
@@ -199,7 +200,7 @@ export const mockFormDefinitions: FormDefinition[] = [
       { id: 'f1', name: 'title', label: 'Başlık', type: 'text', required: true, placeholder: 'İş başlığını girin' },
       { id: 'f2', name: 'description', label: 'Açıklama', type: 'textarea', required: true, placeholder: 'Detaylı açıklama yazın' },
       { id: 'f3', name: 'priority', label: 'Öncelik', type: 'select', required: true, options: [{ label: 'Düşük', value: 'low' }, { label: 'Orta', value: 'medium' }, { label: 'Yüksek', value: 'high' }, { label: 'Kritik', value: 'critical' }] },
-      { id: 'f4', name: 'location', label: 'Lokasyon', type: 'select', required: true, options: [{ label: 'Lobi', value: 'lobi' }, { label: 'Kat 1-3', value: 'kat1-3' }, { label: 'Kat 4-6', value: 'kat4-6' }, { label: 'Restoran', value: 'restoran' }, { label: 'Mutfak', value: 'mutfak' }] },
+      { id: 'f4', name: 'location', label: 'Lokasyon', type: 'select', required: true, options: taskLocationOptions },
       { id: 'f5', name: 'roomNumber', label: 'Oda No', type: 'text', required: false, placeholder: 'Oda numarası' },
       { id: 'f6', name: 'photos', label: 'Fotoğraflar', type: 'file', required: false },
     ],

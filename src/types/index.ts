@@ -87,6 +87,15 @@ export interface Department {
   status: 'active' | 'inactive';
 }
 
+export interface TaskLocation {
+  id: string;
+  name: string;
+  roomNumber?: string;
+  property: string;
+  isDeleted: boolean;
+  isPassive: boolean;
+}
+
 export interface OrgNode {
   id: string;
   name: string;
