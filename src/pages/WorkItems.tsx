@@ -266,6 +266,16 @@ const WorkItems: React.FC = () => {
     updateWorkItem(selectedWI.id, { status: 'Escalated' });
   };
 
+  const handleCompleteWorkItem = () => {
+    if (!selectedWI || selectedWI.status !== 'In Progress') return;
+    updateWorkItem(selectedWI.id, { status: 'Completed' });
+  };
+
+  const handleReopenWorkItem = () => {
+    if (!selectedWI || selectedWI.status !== 'Completed') return;
+    updateWorkItem(selectedWI.id, { status: 'In Progress' });
+  };
+
   const handleAddComment = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedWI) return;
@@ -598,8 +608,22 @@ const WorkItems: React.FC = () => {
                   Eskale Et
                 </button>
               )}
-              {selectedWI.status === 'In Progress' && <button className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700">Kapat</button>}
-              {selectedWI.status === 'Completed' && <button className="px-3 py-1.5 bg-amber-500 text-white text-xs font-medium rounded-lg hover:bg-amber-600">Yeniden Aç</button>}
+              {selectedWI.status === 'In Progress' && (
+                <button
+                  onClick={handleCompleteWorkItem}
+                  className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700"
+                >
+                  Bitir
+                </button>
+              )}
+              {selectedWI.status === 'Completed' && (
+                <button
+                  onClick={handleReopenWorkItem}
+                  className="px-3 py-1.5 bg-amber-500 text-white text-xs font-medium rounded-lg hover:bg-amber-600"
+                >
+                  Yeniden Aç
+                </button>
+              )}
               <button
                 onClick={() => setShowCommentForm((current) => !current)}
                 className="px-3 py-1.5 bg-gray-200 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-300"
