@@ -1,32 +1,37 @@
 import React from 'react';
 import { useStore } from '../store/useStore';
-import { mockWorkItems, mockIncidents, weeklyWorkData, departmentPerformance, coverageData } from '../data/mockData';
+import { mockIncidents, weeklyWorkData, departmentPerformance, coverageData } from '../data/mockData';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts';
 import { TrendingUp, TrendingDown, Minus, Clock, AlertTriangle, CheckCircle2, Users, XCircle, ArrowRight, Zap, Activity } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
-  const { user } = useStore();
+  const { user, workItems } = useStore();
 
-  const activeWorkItems = mockWorkItems.filter(wi => wi.status !== 'Completed');
-  const criticalItems = mockWorkItems.filter(wi => wi.priority === 'critical');
+  const activeWorkItems = workItems.filter(wi => wi.status !== 'Completed');
+  const criticalItems = workItems.filter(wi => wi.priority === 'critical');
   const activeIncidents = mockIncidents.filter(inc => inc.status === 'Aktif' || inc.status === 'İnceleniyor');
-  const slaBreached = mockWorkItems.filter(wi => wi.status === 'Escalated');
+  const slaBreached = workItems.filter(wi => wi.status === 'Escalated');
+  const today = new Date().toISOString().slice(0, 10);
+  const completedToday = workItems.filter(wi => wi.status === 'Completed' && wi.updatedAt.startsWith(today));
+  const urgentWorkItems = workItems
+    .filter(wi => wi.priority === 'critical' || wi.priority === 'high')
+    .slice(0, 5);
 
   const kpiCards = [
     { label: 'Açık İşler', value: activeWorkItems.length, change: -12, changeType: 'down' as const, icon: <Clock size={20} />, color: 'from-blue-500 to-blue-600', bgLight: 'bg-blue-50' },
     { label: 'Kritik İşler', value: criticalItems.length, change: 50, changeType: 'up' as const, icon: <AlertTriangle size={20} />, color: 'from-red-500 to-red-600', bgLight: 'bg-red-50' },
     { label: 'Aktif Incident', value: activeIncidents.length, change: -8, changeType: 'down' as const, icon: <Activity size={20} />, color: 'from-amber-500 to-orange-500', bgLight: 'bg-amber-50' },
-    { label: 'Bugün Tamamlanan', value: 12, change: 20, changeType: 'up' as const, icon: <CheckCircle2 size={20} />, color: 'from-green-500 to-emerald-600', bgLight: 'bg-green-50' },
+    { label: 'Bugün Tamamlanan', value: completedToday.length, change: 0, changeType: 'neutral' as const, icon: <CheckCircle2 size={20} />, color: 'from-green-500 to-emerald-600', bgLight: 'bg-green-50' },
     { label: 'SLA Aşan', value: slaBreached.length, change: 0, changeType: 'neutral' as const, icon: <XCircle size={20} />, color: 'from-purple-500 to-purple-600', bgLight: 'bg-purple-50' },
     { label: 'Aktif Personel', value: 127, change: 3, changeType: 'up' as const, icon: <Users size={20} />, color: 'from-indigo-500 to-indigo-600', bgLight: 'bg-indigo-50' },
   ];
 
   const pieData = [
-    { name: 'Açık', value: mockWorkItems.filter(w => w.status === 'Open').length, color: '#3b82f6' },
-    { name: 'Atandı', value: mockWorkItems.filter(w => w.status === 'Assigned').length, color: '#f59e0b' },
-    { name: 'Devam Ediyor', value: mockWorkItems.filter(w => w.status === 'In Progress').length, color: '#8b5cf6' },
-    { name: 'Tamamlandı', value: mockWorkItems.filter(w => w.status === 'Completed').length, color: '#10b981' },
-    { name: 'Eskale Edildi', value: mockWorkItems.filter(w => w.status === 'Escalated').length, color: '#ef4444' },
+    { name: 'Açık', value: workItems.filter(w => w.status === 'Open').length, color: '#3b82f6' },
+    { name: 'Atandı', value: workItems.filter(w => w.status === 'Assigned').length, color: '#f59e0b' },
+    { name: 'Devam Ediyor', value: workItems.filter(w => w.status === 'In Progress').length, color: '#8b5cf6' },
+    { name: 'Tamamlandı', value: workItems.filter(w => w.status === 'Completed').length, color: '#10b981' },
+    { name: 'Eskale Edildi', value: workItems.filter(w => w.status === 'Escalated').length, color: '#ef4444' },
   ];
 
   return (
@@ -194,10 +199,10 @@ const Dashboard: React.FC = () => {
             </button>
           </div>
           <div className="space-y-3">
-            {mockWorkItems
-              .filter(wi => wi.priority === 'critical' || wi.priority === 'high')
-              .slice(0, 5)
-              .map((wi) => (
+            {urgentWorkItems.length === 0 ? (
+              <p className="text-sm text-gray-500 py-6 text-center">Kritik iş bulunmuyor.</p>
+            ) : (
+              urgentWorkItems.map((wi) => (
                 <div key={wi.id} className="flex items-start gap-3 p-2.5 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors border border-gray-100">
                   <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
                     wi.priority === 'critical' ? 'bg-red-500' : 'bg-amber-500'
@@ -218,7 +223,8 @@ const Dashboard: React.FC = () => {
                     )}
                   </div>
                 </div>
-              ))}
+              ))
+            )}
           </div>
         </div>
       </div>

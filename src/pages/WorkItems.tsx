@@ -1,7 +1,55 @@
 import React, { useState } from 'react';
-import { mockWorkItems } from '../data/mockData';
 import { taskLocationGroups } from '../data/taskLocations';
+import { useStore } from '../store/useStore';
+import type { WorkItem } from '../types';
 import { Search, Filter, Plus, MoreHorizontal, ArrowUpDown, Clock, MapPin, MessageSquare, Paperclip, ChevronRight, X } from 'lucide-react';
+
+type WorkItemPriority = WorkItem['priority'];
+
+interface NewWorkItemForm {
+  title: string;
+  description: string;
+  type: string;
+  priority: WorkItemPriority | '';
+  sourceDepartment: string;
+  targetDepartment: string;
+  location: string;
+  assignee: string;
+}
+
+const emptyNewWorkItemForm: NewWorkItemForm = {
+  title: '',
+  description: '',
+  type: '',
+  priority: '',
+  sourceDepartment: '',
+  targetDepartment: '',
+  location: '',
+  assignee: '',
+};
+
+const workItemTypes = [
+  'Teknik İş',
+  'Housekeeping',
+  'Bellboy Çağrısı',
+  'Restoran Görevi',
+  'Misafir İlişkileri',
+  'F&B Görevi',
+  'Diğer',
+];
+
+const departmentOptions = [
+  'Front Office',
+  'Housekeeping',
+  'Teknik Servis',
+  'F&B Servis',
+  'F&B Mutfak',
+  'Guest Relations',
+  'Bell Desk',
+  'Güvenlik',
+];
+
+const assigneeOptions = ['Mehmet Kaya', 'Ayşe Çelik', 'Ali Vuran'];
 
 const priorityColors: Record<string, string> = {
   low: 'bg-gray-100 text-gray-600',
@@ -10,42 +58,150 @@ const priorityColors: Record<string, string> = {
   critical: 'bg-red-100 text-red-700',
 };
 
+const priorityLabels: Record<WorkItemPriority, string> = {
+  low: 'Düşük',
+  medium: 'Orta',
+  high: 'Yüksek',
+  critical: 'Kritik',
+};
+
+const prioritySla: Record<WorkItemPriority, { label: string; hours: number }> = {
+  low: { label: '8 saat', hours: 8 },
+  medium: { label: '4 saat', hours: 4 },
+  high: { label: '2 saat', hours: 2 },
+  critical: { label: '1 saat', hours: 1 },
+};
+
 const statusColors: Record<string, string> = {
-  'Open': 'bg-gray-100 text-gray-700',
-  'Assigned': 'bg-blue-100 text-blue-700',
+  Open: 'bg-gray-100 text-gray-700',
+  Assigned: 'bg-blue-100 text-blue-700',
   'In Progress': 'bg-purple-100 text-purple-700',
-  'Completed': 'bg-green-100 text-green-700',
-  'Escalated': 'bg-red-100 text-red-700',
+  Completed: 'bg-green-100 text-green-700',
+  Escalated: 'bg-red-100 text-red-700',
+};
+
+const statusLabels: Record<string, string> = {
+  Open: 'Açık',
+  Assigned: 'Atandı',
+  'In Progress': 'Devam Ediyor',
+  Completed: 'Tamamlandı',
+  Escalated: 'Eskale Edildi',
+};
+
+const getNextWorkItemId = (workItems: WorkItem[]) => {
+  const maxId = workItems.reduce((max, item) => {
+    const match = item.id.match(/^WI-(\d+)$/);
+    return match ? Math.max(max, Number(match[1])) : max;
+  }, 0);
+
+  return `WI-${String(maxId + 1).padStart(4, '0')}`;
+};
+
+const getTaskLocationLabel = (value: string) => {
+  for (const group of taskLocationGroups) {
+    const option = group.options.find((location) => location.value === value);
+    if (option) return `${group.property.name} - ${option.label}`;
+  }
+
+  return '';
 };
 
 const WorkItems: React.FC = () => {
+  const { workItems, addWorkItem } = useStore();
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [showNewForm, setShowNewForm] = useState(false);
+  const [newWorkItemForm, setNewWorkItemForm] = useState<NewWorkItemForm>(emptyNewWorkItemForm);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'assigned' | 'team' | 'escalated' | 'sla'>('all');
 
-  const filteredItems = mockWorkItems.filter(item => {
+  const filteredItems = workItems.filter((item) => {
+    if (activeTab === 'assigned' && !item.assignee) return false;
+    if (activeTab === 'team' && !item.assigneeTeam) return false;
+    if (activeTab === 'escalated' && item.status !== 'Escalated') return false;
+    if (activeTab === 'sla' && item.status !== 'Escalated') return false;
     if (filterStatus !== 'all' && item.status !== filterStatus) return false;
     if (filterPriority !== 'all' && item.priority !== filterPriority) return false;
-    if (searchQuery && !item.title.toLowerCase().includes(searchQuery.toLowerCase()) && !item.id.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+    if (normalizedSearch) {
+      const searchableText = `${item.id} ${item.title} ${item.location} ${item.type}`.toLowerCase();
+      if (!searchableText.includes(normalizedSearch)) return false;
+    }
+
     return true;
   });
 
-  const selectedWI = mockWorkItems.find(wi => wi.id === selectedItem);
+  const selectedWI = workItems.find((wi) => wi.id === selectedItem);
 
   const tabs = [
-    { key: 'all' as const, label: 'Tüm İşler', count: mockWorkItems.length },
-    { key: 'assigned' as const, label: 'Bana Atanan', count: 2 },
-    { key: 'team' as const, label: 'Ekibime Atanan', count: 4 },
-    { key: 'escalated' as const, label: 'Eskale Edilen', count: mockWorkItems.filter(w => w.status === 'Escalated').length },
-    { key: 'sla' as const, label: 'SLA Aşan', count: mockWorkItems.filter(w => w.status === 'Escalated').length },
+    { key: 'all' as const, label: 'Tüm İşler', count: workItems.length },
+    { key: 'assigned' as const, label: 'Bana Atanan', count: workItems.filter((w) => Boolean(w.assignee)).length },
+    { key: 'team' as const, label: 'Ekibime Atanan', count: workItems.filter((w) => Boolean(w.assigneeTeam)).length },
+    { key: 'escalated' as const, label: 'Eskale Edilen', count: workItems.filter((w) => w.status === 'Escalated').length },
+    { key: 'sla' as const, label: 'SLA Aşan', count: workItems.filter((w) => w.status === 'Escalated').length },
   ];
+
+  const canCreateWorkItem = Boolean(
+    newWorkItemForm.title.trim() &&
+    newWorkItemForm.description.trim() &&
+    newWorkItemForm.type &&
+    newWorkItemForm.priority &&
+    newWorkItemForm.location
+  );
+
+  const closeNewWorkItemForm = () => {
+    setShowNewForm(false);
+    setNewWorkItemForm(emptyNewWorkItemForm);
+  };
+
+  const updateNewWorkItemForm = (updates: Partial<NewWorkItemForm>) => {
+    setNewWorkItemForm((current) => ({ ...current, ...updates }));
+  };
+
+  const handleCreateWorkItem = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canCreateWorkItem || !newWorkItemForm.priority) return;
+
+    const now = new Date();
+    const sla = prioritySla[newWorkItemForm.priority];
+    const dueDate = new Date(now.getTime() + sla.hours * 60 * 60 * 1000);
+    const sourceDepartment = newWorkItemForm.sourceDepartment || 'Belirtilmedi';
+    const targetDepartment = newWorkItemForm.targetDepartment || 'Belirtilmedi';
+    const location = getTaskLocationLabel(newWorkItemForm.location);
+    const workItem: WorkItem = {
+      id: getNextWorkItemId(workItems),
+      title: newWorkItemForm.title.trim(),
+      description: newWorkItemForm.description.trim(),
+      type: newWorkItemForm.type,
+      sourceDepartment,
+      targetDepartment,
+      location,
+      priority: newWorkItemForm.priority,
+      status: newWorkItemForm.assignee ? 'Assigned' : 'Open',
+      sla: sla.label,
+      assignee: newWorkItemForm.assignee || undefined,
+      assigneeTeam: newWorkItemForm.assignee && newWorkItemForm.targetDepartment ? newWorkItemForm.targetDepartment : undefined,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      dueDate: dueDate.toISOString(),
+      comments: 0,
+      files: 0,
+      subtasks: 0,
+    };
+
+    addWorkItem(workItem);
+    setActiveTab('all');
+    setFilterStatus('all');
+    setFilterPriority('all');
+    setSearchQuery('');
+    setSelectedItem(workItem.id);
+    closeNewWorkItemForm();
+  };
 
   return (
     <div className="p-6 space-y-4">
-      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">İş Takibi</h1>
@@ -59,9 +215,8 @@ const WorkItems: React.FC = () => {
         </button>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-lg overflow-x-auto">
-        {tabs.map(tab => (
+        {tabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
@@ -79,13 +234,12 @@ const WorkItems: React.FC = () => {
         ))}
       </div>
 
-      {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px] max-w-md">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
-            placeholder="İş ara (ID, başlık)..."
+            placeholder="İş ara (ID, başlık, lokasyon)..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none"
@@ -119,7 +273,6 @@ const WorkItems: React.FC = () => {
         </button>
       </div>
 
-      {/* Table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -138,54 +291,63 @@ const WorkItems: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredItems.map((item) => (
-                <tr
-                  key={item.id}
-                  onClick={() => setSelectedItem(item.id)}
-                  className={`border-b border-gray-100 hover:bg-amber-50/30 cursor-pointer transition-colors ${
-                    selectedItem === item.id ? 'bg-amber-50/50' : ''
-                  }`}
-                >
-                  <td className="px-4 py-3 text-sm font-mono text-gray-600">{item.id}</td>
-                  <td className="px-4 py-3">
-                    <p className="text-sm font-medium text-gray-900">{item.title}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{item.sourceDepartment} → {item.targetDepartment}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600">{item.type}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${priorityColors[item.priority]}`}>
-                      {item.priority === 'critical' ? 'Kritik' : item.priority === 'high' ? 'Yüksek' : item.priority === 'medium' ? 'Orta' : 'Düşük'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusColors[item.status] || 'bg-gray-100 text-gray-600'}`}>
-                      {item.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{item.assignee || '-'}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{item.sla}</td>
-                  <td className="px-4 py-3">
-                    <button className="p-1 hover:bg-gray-100 rounded" onClick={(e) => { e.stopPropagation(); }}>
-                      <MoreHorizontal size={16} className="text-gray-400" />
-                    </button>
+              {filteredItems.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-10 text-center">
+                    <p className="text-sm font-medium text-gray-600">
+                      {workItems.length === 0 ? 'Henüz iş oluşturulmadı.' : 'Filtrelere uyan iş bulunamadı.'}
+                    </p>
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredItems.map((item) => (
+                  <tr
+                    key={item.id}
+                    onClick={() => setSelectedItem(item.id)}
+                    className={`border-b border-gray-100 hover:bg-amber-50/30 cursor-pointer transition-colors ${
+                      selectedItem === item.id ? 'bg-amber-50/50' : ''
+                    }`}
+                  >
+                    <td className="px-4 py-3 text-sm font-mono text-gray-600">{item.id}</td>
+                    <td className="px-4 py-3">
+                      <p className="text-sm font-medium text-gray-900">{item.title}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{item.sourceDepartment} → {item.targetDepartment}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600">{item.type}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${priorityColors[item.priority]}`}>
+                        {priorityLabels[item.priority]}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusColors[item.status] || 'bg-gray-100 text-gray-600'}`}>
+                        {statusLabels[item.status] || item.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{item.assignee || '-'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{item.sla}</td>
+                    <td className="px-4 py-3">
+                      <button className="p-1 hover:bg-gray-100 rounded" onClick={(e) => { e.stopPropagation(); }}>
+                        <MoreHorizontal size={16} className="text-gray-400" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Detail Panel */}
       {selectedWI && (
         <div className="fixed inset-y-0 right-0 w-full md:w-[560px] bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col">
           <div className="flex items-center justify-between p-4 border-b border-gray-200">
             <div className="flex items-center gap-2">
               <span className="font-mono text-sm text-gray-500">{selectedWI.id}</span>
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[selectedWI.status]}`}>
-                {selectedWI.status}
+                {statusLabels[selectedWI.status] || selectedWI.status}
               </span>
             </div>
             <button onClick={() => setSelectedItem(null)} className="p-1 hover:bg-gray-100 rounded">
@@ -208,7 +370,7 @@ const WorkItems: React.FC = () => {
                 <p className="text-[10px] text-gray-400 uppercase font-medium">Öncelik</p>
                 <p className="text-sm font-medium mt-0.5">
                   <span className={`text-xs px-2 py-0.5 rounded-full ${priorityColors[selectedWI.priority]}`}>
-                    {selectedWI.priority === 'critical' ? 'Kritik' : selectedWI.priority === 'high' ? 'Yüksek' : selectedWI.priority === 'medium' ? 'Orta' : 'Düşük'}
+                    {priorityLabels[selectedWI.priority]}
                   </span>
                 </p>
               </div>
@@ -248,7 +410,6 @@ const WorkItems: React.FC = () => {
               <span className="flex items-center gap-1"><ChevronRight size={14} /> {selectedWI.subtasks} alt iş</span>
             </div>
 
-            {/* Action Buttons */}
             <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-200">
               {selectedWI.status === 'Open' && <button className="px-3 py-1.5 bg-blue-500 text-white text-xs font-medium rounded-lg hover:bg-blue-600">Ata</button>}
               {selectedWI.status === 'Assigned' && <button className="px-3 py-1.5 bg-green-500 text-white text-xs font-medium rounded-lg hover:bg-green-600">Kabul Et</button>}
@@ -261,42 +422,56 @@ const WorkItems: React.FC = () => {
         </div>
       )}
 
-      {/* New Work Item Modal */}
       {showNewForm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <form onSubmit={handleCreateWorkItem} className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-5 border-b border-gray-200">
               <h2 className="text-lg font-bold text-gray-900">Yeni İş Oluştur</h2>
-              <button onClick={() => setShowNewForm(false)} className="p-1 hover:bg-gray-100 rounded">
+              <button type="button" onClick={closeNewWorkItemForm} className="p-1 hover:bg-gray-100 rounded">
                 <X size={18} />
               </button>
             </div>
             <div className="p-5 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Başlık *</label>
-                <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none" placeholder="İş başlığını girin" />
+                <input
+                  type="text"
+                  value={newWorkItemForm.title}
+                  onChange={(e) => updateNewWorkItemForm({ title: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none"
+                  placeholder="İş başlığını girin"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Açıklama *</label>
-                <textarea className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none h-24" placeholder="Detaylı açıklama yazın" />
+                <textarea
+                  value={newWorkItemForm.description}
+                  onChange={(e) => updateNewWorkItemForm({ description: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none h-24"
+                  placeholder="Detaylı açıklama yazın"
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">İş Tipi *</label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none">
+                  <select
+                    value={newWorkItemForm.type}
+                    onChange={(e) => updateNewWorkItemForm({ type: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none"
+                  >
                     <option value="">Seçin...</option>
-                    <option>Teknik İş</option>
-                    <option>Housekeeping</option>
-                    <option>Bellboy Çağrısı</option>
-                    <option>Restoran Görevi</option>
-                    <option>Misafir İlişkileri</option>
-                    <option>F&B Görevi</option>
-                    <option>Diğer</option>
+                    {workItemTypes.map((type) => (
+                      <option key={type}>{type}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Öncelik *</label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none">
+                  <select
+                    value={newWorkItemForm.priority}
+                    onChange={(e) => updateNewWorkItemForm({ priority: e.target.value as NewWorkItemForm['priority'] })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none"
+                  >
                     <option value="">Seçin...</option>
                     <option value="low">Düşük</option>
                     <option value="medium">Orta</option>
@@ -306,29 +481,37 @@ const WorkItems: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Kaynak Departman</label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none">
+                  <select
+                    value={newWorkItemForm.sourceDepartment}
+                    onChange={(e) => updateNewWorkItemForm({ sourceDepartment: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none"
+                  >
                     <option value="">Seçin...</option>
-                    <option>Front Office</option>
-                    <option>Housekeeping</option>
-                    <option>Teknik Servis</option>
-                    <option>F&B Servis</option>
-                    <option>Guest Relations</option>
+                    {departmentOptions.map((department) => (
+                      <option key={department}>{department}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Hedef Departman</label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none">
+                  <select
+                    value={newWorkItemForm.targetDepartment}
+                    onChange={(e) => updateNewWorkItemForm({ targetDepartment: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none"
+                  >
                     <option value="">Seçin...</option>
-                    <option>Front Office</option>
-                    <option>Housekeeping</option>
-                    <option>Teknik Servis</option>
-                    <option>F&B Servis</option>
-                    <option>Bell Desk</option>
+                    {departmentOptions.map((department) => (
+                      <option key={department}>{department}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Lokasyon</label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Lokasyon *</label>
+                  <select
+                    value={newWorkItemForm.location}
+                    onChange={(e) => updateNewWorkItemForm({ location: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none"
+                  >
                     <option value="">Seçin...</option>
                     {taskLocationGroups.map((group) => (
                       <optgroup key={group.property.id} label={group.property.name}>
@@ -341,11 +524,15 @@ const WorkItems: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Atanan Kişi</label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none">
+                  <select
+                    value={newWorkItemForm.assignee}
+                    onChange={(e) => updateNewWorkItemForm({ assignee: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none"
+                  >
                     <option value="">Otomatik Ata</option>
-                    <option>Mehmet Kaya</option>
-                    <option>Ayşe Çelik</option>
-                    <option>Ali Vuran</option>
+                    {assigneeOptions.map((assignee) => (
+                      <option key={assignee}>{assignee}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -357,15 +544,21 @@ const WorkItems: React.FC = () => {
                 </div>
               </div>
               <div className="flex justify-end gap-3 pt-3 border-t border-gray-200">
-                <button onClick={() => setShowNewForm(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">
+                <button type="button" onClick={closeNewWorkItemForm} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">
                   İptal
                 </button>
-                <button onClick={() => setShowNewForm(false)} className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-sm font-medium rounded-lg hover:from-amber-600 hover:to-orange-600">
+                <button
+                  type="submit"
+                  disabled={!canCreateWorkItem}
+                  className={`px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-sm font-medium rounded-lg hover:from-amber-600 hover:to-orange-600 ${
+                    canCreateWorkItem ? '' : 'opacity-50 cursor-not-allowed'
+                  }`}
+                >
                   Oluştur
                 </button>
               </div>
             </div>
-          </div>
+          </form>
         </div>
       )}
     </div>
