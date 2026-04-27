@@ -89,6 +89,7 @@ export interface Department {
 
 export interface TaskLocation {
   id: string;
+  propertyId: string;
   name: string;
   roomNumber?: string;
   property: string;

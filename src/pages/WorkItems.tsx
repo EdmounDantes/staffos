@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { mockWorkItems } from '../data/mockData';
-import { taskLocationOptions } from '../data/taskLocations';
+import { taskLocationGroups } from '../data/taskLocations';
 import { Search, Filter, Plus, MoreHorizontal, ArrowUpDown, Clock, MapPin, MessageSquare, Paperclip, ChevronRight, X } from 'lucide-react';
 
 const priorityColors: Record<string, string> = {
@@ -330,8 +330,12 @@ const WorkItems: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Lokasyon</label>
                   <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none">
                     <option value="">Seçin...</option>
-                    {taskLocationOptions.map((location) => (
-                      <option key={location.value} value={location.value}>{location.label}</option>
+                    {taskLocationGroups.map((group) => (
+                      <optgroup key={group.property.id} label={group.property.name}>
+                        {group.options.map((location) => (
+                          <option key={location.value} value={location.value}>{location.label}</option>
+                        ))}
+                      </optgroup>
                     ))}
                   </select>
                 </div>
