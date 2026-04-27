@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { taskLocationGroups } from '../data/taskLocations';
 import {
   getHotelDepartments,
@@ -9,7 +9,7 @@ import {
   hotelProperties,
 } from '../data/hotelDefinitions';
 import { useStore } from '../store/useStore';
-import type { WorkItem } from '../types';
+import type { WorkItem, WorkItemFileAttachment } from '../types';
 import { Search, Filter, Plus, MoreHorizontal, ArrowUpDown, Clock, MapPin, MessageSquare, Paperclip, ChevronRight, X } from 'lucide-react';
 
 type WorkItemPriority = WorkItem['priority'];
@@ -26,6 +26,7 @@ interface NewWorkItemForm {
   subDepartment: string;
   location: string;
   assignee: string;
+  attachments: WorkItemFileAttachment[];
 }
 
 const emptyNewWorkItemForm: NewWorkItemForm = {
@@ -40,6 +41,7 @@ const emptyNewWorkItemForm: NewWorkItemForm = {
   subDepartment: '',
   location: '',
   assignee: '',
+  attachments: [],
 };
 
 const priorityColors: Record<string, string> = {
@@ -115,13 +117,21 @@ const formatCommentDate = (value: string) => (
   }).format(new Date(value))
 );
 
+const formatFileSize = (size: number) => {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+};
+
 const WorkItems: React.FC = () => {
   const { user, workItems, addWorkItem, updateWorkItem } = useStore();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [showNewForm, setShowNewForm] = useState(false);
   const [newWorkItemForm, setNewWorkItemForm] = useState<NewWorkItemForm>(emptyNewWorkItemForm);
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [showCommentForm, setShowCommentForm] = useState(false);
   const [commentDraft, setCommentDraft] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -172,10 +182,59 @@ const WorkItems: React.FC = () => {
   const closeNewWorkItemForm = () => {
     setShowNewForm(false);
     setNewWorkItemForm(emptyNewWorkItemForm);
+    setIsDraggingFiles(false);
   };
 
   const updateNewWorkItemForm = (updates: Partial<NewWorkItemForm>) => {
     setNewWorkItemForm((current) => ({ ...current, ...updates }));
+  };
+
+  const addAttachments = (files: FileList | File[]) => {
+    const selectedFiles = Array.from(files);
+    if (selectedFiles.length === 0) return;
+
+    const addedAt = new Date().toISOString();
+    setNewWorkItemForm((current) => {
+      const existingKeys = new Set(
+        current.attachments.map((attachment) => `${attachment.name}:${attachment.size}:${attachment.lastModified}`)
+      );
+      const nextAttachments = selectedFiles
+        .filter((file) => !existingKeys.has(`${file.name}:${file.size}:${file.lastModified}`))
+        .map((file, index) => ({
+          id: `attachment-${Date.now()}-${index}`,
+          name: file.name,
+          size: file.size,
+          type: file.type || 'Bilinmeyen',
+          lastModified: file.lastModified,
+          addedAt,
+          addedBy: user?.name,
+        }));
+
+      return {
+        ...current,
+        attachments: [...current.attachments, ...nextAttachments],
+      };
+    });
+  };
+
+  const removeAttachment = (attachmentId: string) => {
+    setNewWorkItemForm((current) => ({
+      ...current,
+      attachments: current.attachments.filter((attachment) => attachment.id !== attachmentId),
+    }));
+  };
+
+  const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files) {
+      addAttachments(event.target.files);
+    }
+    event.target.value = '';
+  };
+
+  const handleFileDrop = (event: React.DragEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    setIsDraggingFiles(false);
+    addAttachments(event.dataTransfer.files);
   };
 
   const handlePropertyChange = (propertyId: string) => {
@@ -243,7 +302,8 @@ const WorkItems: React.FC = () => {
       updatedAt: now.toISOString(),
       dueDate: dueDate.toISOString(),
       comments: 0,
-      files: 0,
+      files: newWorkItemForm.attachments.length,
+      fileAttachments: newWorkItemForm.attachments,
       subtasks: 0,
     };
 
@@ -540,6 +600,28 @@ const WorkItems: React.FC = () => {
               <span className="flex items-center gap-1"><ChevronRight size={14} /> {selectedWI.subtasks} alt iş</span>
             </div>
 
+            {selectedWI.fileAttachments && selectedWI.fileAttachments.length > 0 && (
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-gray-900">Ekli Dosyalar</h3>
+                <div className="space-y-2">
+                  {selectedWI.fileAttachments.map((attachment) => (
+                    <div key={attachment.id} className="flex items-center justify-between gap-3 p-3 bg-gray-50 rounded-lg">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Paperclip size={14} className="text-gray-400 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-800 truncate">{attachment.name}</p>
+                          <p className="text-[10px] text-gray-400">
+                            {formatFileSize(attachment.size)} • {formatCommentDate(attachment.addedAt)}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] text-gray-500 shrink-0">{attachment.type}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {selectedWI.commentHistory && selectedWI.commentHistory.length > 0 && (
               <div className="space-y-2">
                 <h3 className="text-sm font-semibold text-gray-900">Yorumlar</h3>
@@ -788,10 +870,61 @@ const WorkItems: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Dosya Ekle</label>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-amber-400 transition-colors cursor-pointer">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={handleFileInputChange}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragEnter={(event) => {
+                    event.preventDefault();
+                    setIsDraggingFiles(true);
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    setIsDraggingFiles(true);
+                  }}
+                  onDragLeave={(event) => {
+                    event.preventDefault();
+                    setIsDraggingFiles(false);
+                  }}
+                  onDrop={handleFileDrop}
+                  className={`w-full border-2 border-dashed rounded-lg p-4 text-center transition-colors cursor-pointer ${
+                    isDraggingFiles
+                      ? 'border-amber-500 bg-amber-50'
+                      : 'border-gray-300 hover:border-amber-400'
+                  }`}
+                >
                   <Paperclip size={20} className="mx-auto text-gray-400 mb-1" />
                   <p className="text-xs text-gray-500">Dosyaları sürükleyin veya tıklayın</p>
-                </div>
+                </button>
+                {newWorkItemForm.attachments.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {newWorkItemForm.attachments.map((attachment) => (
+                      <div key={attachment.id} className="flex items-center justify-between gap-3 p-2 bg-gray-50 border border-gray-200 rounded-lg">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Paperclip size={14} className="text-gray-400 shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-800 truncate">{attachment.name}</p>
+                            <p className="text-[10px] text-gray-400">{formatFileSize(attachment.size)}</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeAttachment(attachment.id)}
+                          className="p-1 rounded hover:bg-gray-200 shrink-0"
+                          aria-label={`${attachment.name} dosyasını kaldır`}
+                        >
+                          <X size={14} className="text-gray-500" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="flex justify-end gap-3 pt-3 border-t border-gray-200">
                 <button type="button" onClick={closeNewWorkItemForm} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">

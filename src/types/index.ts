@@ -46,6 +46,7 @@ export interface WorkItem {
   comments: number;
   commentHistory?: WorkItemComment[];
   files: number;
+  fileAttachments?: WorkItemFileAttachment[];
   subtasks: number;
 }
 
@@ -54,6 +55,16 @@ export interface WorkItemComment {
   author: string;
   message: string;
   createdAt: string;
+}
+
+export interface WorkItemFileAttachment {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  lastModified: number;
+  addedAt: string;
+  addedBy?: string;
 }
 
 export interface Incident {
