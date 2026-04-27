@@ -1,5 +1,13 @@
 import React, { useState } from 'react';
 import { taskLocationGroups } from '../data/taskLocations';
+import {
+  getHotelDepartments,
+  getHotelEmployees,
+  getHotelSourceTypes,
+  getHotelSubDepartments,
+  getHotelTaskDefinitions,
+  hotelProperties,
+} from '../data/hotelDefinitions';
 import { useStore } from '../store/useStore';
 import type { WorkItem } from '../types';
 import { Search, Filter, Plus, MoreHorizontal, ArrowUpDown, Clock, MapPin, MessageSquare, Paperclip, ChevronRight, X } from 'lucide-react';
@@ -7,49 +15,32 @@ import { Search, Filter, Plus, MoreHorizontal, ArrowUpDown, Clock, MapPin, Messa
 type WorkItemPriority = WorkItem['priority'];
 
 interface NewWorkItemForm {
+  propertyId: string;
   title: string;
   description: string;
-  type: string;
+  taskDefinitionId: string;
+  sourceType: string;
   priority: WorkItemPriority | '';
   sourceDepartment: string;
   targetDepartment: string;
+  subDepartment: string;
   location: string;
   assignee: string;
 }
 
 const emptyNewWorkItemForm: NewWorkItemForm = {
+  propertyId: hotelProperties[0]?.id ?? '',
   title: '',
   description: '',
-  type: '',
+  taskDefinitionId: '',
+  sourceType: '',
   priority: '',
   sourceDepartment: '',
   targetDepartment: '',
+  subDepartment: '',
   location: '',
   assignee: '',
 };
-
-const workItemTypes = [
-  'Teknik İş',
-  'Housekeeping',
-  'Bellboy Çağrısı',
-  'Restoran Görevi',
-  'Misafir İlişkileri',
-  'F&B Görevi',
-  'Diğer',
-];
-
-const departmentOptions = [
-  'Front Office',
-  'Housekeeping',
-  'Teknik Servis',
-  'F&B Servis',
-  'F&B Mutfak',
-  'Guest Relations',
-  'Bell Desk',
-  'Güvenlik',
-];
-
-const assigneeOptions = ['Mehmet Kaya', 'Ayşe Çelik', 'Ali Vuran'];
 
 const priorityColors: Record<string, string> = {
   low: 'bg-gray-100 text-gray-600',
@@ -106,6 +97,14 @@ const getTaskLocationLabel = (value: string) => {
   return '';
 };
 
+const getTaskLocationProperty = (value: string) => {
+  const group = taskLocationGroups.find((locationGroup) => (
+    locationGroup.options.some((location) => location.value === value)
+  ));
+
+  return group?.property.name ?? '';
+};
+
 const WorkItems: React.FC = () => {
   const { workItems, addWorkItem } = useStore();
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
@@ -115,6 +114,12 @@ const WorkItems: React.FC = () => {
   const [newWorkItemForm, setNewWorkItemForm] = useState<NewWorkItemForm>(emptyNewWorkItemForm);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'assigned' | 'team' | 'escalated' | 'sla'>('all');
+  const selectedLocationGroup = taskLocationGroups.find((group) => group.property.id === newWorkItemForm.propertyId);
+  const hotelDepartments = getHotelDepartments(newWorkItemForm.propertyId);
+  const hotelSubDepartments = getHotelSubDepartments(newWorkItemForm.propertyId, newWorkItemForm.targetDepartment);
+  const hotelTaskDefinitions = getHotelTaskDefinitions(newWorkItemForm.propertyId);
+  const hotelSourceTypes = getHotelSourceTypes(newWorkItemForm.propertyId);
+  const hotelEmployees = getHotelEmployees(newWorkItemForm.propertyId);
 
   const filteredItems = workItems.filter((item) => {
     if (activeTab === 'assigned' && !item.assignee) return false;
@@ -146,7 +151,8 @@ const WorkItems: React.FC = () => {
   const canCreateWorkItem = Boolean(
     newWorkItemForm.title.trim() &&
     newWorkItemForm.description.trim() &&
-    newWorkItemForm.type &&
+    newWorkItemForm.propertyId &&
+    newWorkItemForm.taskDefinitionId &&
     newWorkItemForm.priority &&
     newWorkItemForm.location
   );
@@ -160,29 +166,67 @@ const WorkItems: React.FC = () => {
     setNewWorkItemForm((current) => ({ ...current, ...updates }));
   };
 
+  const handlePropertyChange = (propertyId: string) => {
+    setNewWorkItemForm((current) => ({
+      ...current,
+      propertyId,
+      taskDefinitionId: '',
+      sourceType: '',
+      sourceDepartment: '',
+      targetDepartment: '',
+      subDepartment: '',
+      location: '',
+      assignee: '',
+    }));
+  };
+
+  const handleTaskDefinitionChange = (taskDefinitionId: string) => {
+    const taskDefinition = hotelTaskDefinitions.find((task) => task.id === taskDefinitionId);
+    setNewWorkItemForm((current) => ({
+      ...current,
+      taskDefinitionId,
+      targetDepartment: taskDefinition?.department || current.targetDepartment,
+      subDepartment: taskDefinition?.subDepartment || current.subDepartment,
+    }));
+  };
+
   const handleCreateWorkItem = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canCreateWorkItem || !newWorkItemForm.priority) return;
 
     const now = new Date();
-    const sla = prioritySla[newWorkItemForm.priority];
-    const dueDate = new Date(now.getTime() + sla.hours * 60 * 60 * 1000);
+    const taskDefinition = hotelTaskDefinitions.find((task) => task.id === newWorkItemForm.taskDefinitionId);
+    const defaultSla = prioritySla[newWorkItemForm.priority];
+    const maxDurationMinutes = taskDefinition?.maxDurationMinutes && taskDefinition.maxDurationMinutes > 0
+      ? taskDefinition.maxDurationMinutes
+      : defaultSla.hours * 60;
+    const slaLabel = maxDurationMinutes % 60 === 0
+      ? `${maxDurationMinutes / 60} saat`
+      : `${maxDurationMinutes} dk`;
+    const dueDate = new Date(now.getTime() + maxDurationMinutes * 60 * 1000);
     const sourceDepartment = newWorkItemForm.sourceDepartment || 'Belirtilmedi';
-    const targetDepartment = newWorkItemForm.targetDepartment || 'Belirtilmedi';
+    const targetDepartment = newWorkItemForm.targetDepartment || taskDefinition?.department || 'Belirtilmedi';
     const location = getTaskLocationLabel(newWorkItemForm.location);
     const workItem: WorkItem = {
       id: getNextWorkItemId(workItems),
       title: newWorkItemForm.title.trim(),
       description: newWorkItemForm.description.trim(),
-      type: newWorkItemForm.type,
+      type: taskDefinition?.name || 'Görev',
+      property: getTaskLocationProperty(newWorkItemForm.location),
+      sourceType: newWorkItemForm.sourceType || undefined,
       sourceDepartment,
       targetDepartment,
+      subDepartment: newWorkItemForm.subDepartment || taskDefinition?.subDepartment || undefined,
       location,
       priority: newWorkItemForm.priority,
       status: newWorkItemForm.assignee ? 'Assigned' : 'Open',
-      sla: sla.label,
+      sla: slaLabel,
+      taskDefinitionId: taskDefinition?.id,
+      idealDurationMinutes: taskDefinition?.idealDurationMinutes ?? null,
+      maxDurationMinutes: taskDefinition?.maxDurationMinutes ?? null,
+      notesRequired: taskDefinition?.notesRequired ?? false,
       assignee: newWorkItemForm.assignee || undefined,
-      assigneeTeam: newWorkItemForm.assignee && newWorkItemForm.targetDepartment ? newWorkItemForm.targetDepartment : undefined,
+      assigneeTeam: newWorkItemForm.assignee && targetDepartment !== 'Belirtilmedi' ? targetDepartment : undefined,
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
       dueDate: dueDate.toISOString(),
@@ -362,10 +406,22 @@ const WorkItems: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-2 gap-3">
+              {selectedWI.property && (
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <p className="text-[10px] text-gray-400 uppercase font-medium">Otel</p>
+                  <p className="text-sm font-medium text-gray-900 mt-0.5">{selectedWI.property}</p>
+                </div>
+              )}
               <div className="p-3 bg-gray-50 rounded-lg">
-                <p className="text-[10px] text-gray-400 uppercase font-medium">İş Tipi</p>
+                <p className="text-[10px] text-gray-400 uppercase font-medium">Görev Tanımı</p>
                 <p className="text-sm font-medium text-gray-900 mt-0.5">{selectedWI.type}</p>
               </div>
+              {selectedWI.sourceType && (
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <p className="text-[10px] text-gray-400 uppercase font-medium">Kaynak Tipi</p>
+                  <p className="text-sm font-medium text-gray-900 mt-0.5">{selectedWI.sourceType}</p>
+                </div>
+              )}
               <div className="p-3 bg-gray-50 rounded-lg">
                 <p className="text-[10px] text-gray-400 uppercase font-medium">Öncelik</p>
                 <p className="text-sm font-medium mt-0.5">
@@ -390,6 +446,12 @@ const WorkItems: React.FC = () => {
                 <p className="text-[10px] text-gray-400 uppercase font-medium">Hedef Departman</p>
                 <p className="text-sm font-medium text-gray-900 mt-0.5">{selectedWI.targetDepartment}</p>
               </div>
+              {selectedWI.subDepartment && (
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <p className="text-[10px] text-gray-400 uppercase font-medium">Alt Departman</p>
+                  <p className="text-sm font-medium text-gray-900 mt-0.5">{selectedWI.subDepartment}</p>
+                </div>
+              )}
             </div>
 
             {selectedWI.assignee && (
@@ -451,17 +513,45 @@ const WorkItems: React.FC = () => {
                   placeholder="Detaylı açıklama yazın"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">İş Tipi *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Otel *</label>
                   <select
-                    value={newWorkItemForm.type}
-                    onChange={(e) => updateNewWorkItemForm({ type: e.target.value })}
+                    value={newWorkItemForm.propertyId}
+                    onChange={(e) => handlePropertyChange(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none"
                   >
                     <option value="">Seçin...</option>
-                    {workItemTypes.map((type) => (
-                      <option key={type}>{type}</option>
+                    {hotelProperties.map((property) => (
+                      <option key={property.id} value={property.id}>{property.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Kaynak Tipi</label>
+                  <select
+                    value={newWorkItemForm.sourceType}
+                    onChange={(e) => updateNewWorkItemForm({ sourceType: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none"
+                  >
+                    <option value="">Seçin...</option>
+                    {hotelSourceTypes.map((sourceType) => (
+                      <option key={sourceType}>{sourceType}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Görev Tanımı *</label>
+                  <select
+                    value={newWorkItemForm.taskDefinitionId}
+                    onChange={(e) => handleTaskDefinitionChange(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none"
+                  >
+                    <option value="">Seçin...</option>
+                    {hotelTaskDefinitions.map((task) => (
+                      <option key={task.id} value={task.id}>
+                        {task.name}{task.department ? ` - ${task.department}` : ''}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -487,8 +577,8 @@ const WorkItems: React.FC = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none"
                   >
                     <option value="">Seçin...</option>
-                    {departmentOptions.map((department) => (
-                      <option key={department}>{department}</option>
+                    {hotelDepartments.map((department) => (
+                      <option key={department.id} value={department.name}>{department.name}</option>
                     ))}
                   </select>
                 </div>
@@ -496,12 +586,25 @@ const WorkItems: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Hedef Departman</label>
                   <select
                     value={newWorkItemForm.targetDepartment}
-                    onChange={(e) => updateNewWorkItemForm({ targetDepartment: e.target.value })}
+                    onChange={(e) => updateNewWorkItemForm({ targetDepartment: e.target.value, subDepartment: '' })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none"
                   >
                     <option value="">Seçin...</option>
-                    {departmentOptions.map((department) => (
-                      <option key={department}>{department}</option>
+                    {hotelDepartments.map((department) => (
+                      <option key={department.id} value={department.name}>{department.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Alt Departman</label>
+                  <select
+                    value={newWorkItemForm.subDepartment}
+                    onChange={(e) => updateNewWorkItemForm({ subDepartment: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none"
+                  >
+                    <option value="">Seçin...</option>
+                    {hotelSubDepartments.map((subDepartment) => (
+                      <option key={subDepartment.id} value={subDepartment.name}>{subDepartment.name}</option>
                     ))}
                   </select>
                 </div>
@@ -513,12 +616,8 @@ const WorkItems: React.FC = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none"
                   >
                     <option value="">Seçin...</option>
-                    {taskLocationGroups.map((group) => (
-                      <optgroup key={group.property.id} label={group.property.name}>
-                        {group.options.map((location) => (
-                          <option key={location.value} value={location.value}>{location.label}</option>
-                        ))}
-                      </optgroup>
+                    {selectedLocationGroup?.options.map((location) => (
+                      <option key={location.value} value={location.value}>{location.label}</option>
                     ))}
                   </select>
                 </div>
@@ -530,8 +629,8 @@ const WorkItems: React.FC = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none"
                   >
                     <option value="">Otomatik Ata</option>
-                    {assigneeOptions.map((assignee) => (
-                      <option key={assignee}>{assignee}</option>
+                    {hotelEmployees.map((assignee) => (
+                      <option key={assignee.id} value={assignee.fullName}>{assignee.fullName}</option>
                     ))}
                   </select>
                 </div>

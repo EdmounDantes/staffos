@@ -1,20 +1,27 @@
 import React, { useState } from 'react';
 import { mockLeaveRequests, mockTrainings, mockProcurement } from '../data/mockData';
+import { hotelEmployees, hotelProperties } from '../data/hotelDefinitions';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import {
   GraduationCap, CalendarCheck, DollarSign, BarChart3, Send, Clock,
   CheckCircle, XCircle, AlertCircle, TrendingUp, Download, Plus,
-  BookOpen, Target, Award, Sparkles
+  BookOpen, Target, Award, Sparkles, Users, Building2
 } from 'lucide-react';
 
 // ==================== PERSONNEL ====================
 export const Personnel: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'leave' | 'training' | 'performance'>('leave');
+  const [activeTab, setActiveTab] = useState<'directory' | 'leave' | 'training' | 'performance'>('directory');
 
   const leaveStats = {
     pending: mockLeaveRequests.filter(l => l.status === 'pending').length,
     approved: mockLeaveRequests.filter(l => l.status === 'approved').length,
     rejected: mockLeaveRequests.filter(l => l.status === 'rejected').length,
+  };
+  const employeeStats = {
+    total: hotelEmployees.length,
+    hotels: hotelProperties.length,
+    managers: hotelEmployees.filter((employee) => employee.isManager).length,
+    departments: new Set(hotelEmployees.map((employee) => employee.department).filter(Boolean)).size,
   };
 
   return (
@@ -24,7 +31,10 @@ export const Personnel: React.FC = () => {
         <p className="text-gray-500 text-sm mt-0.5">İzin, eğitim, performans ve gelişim yönetimi</p>
       </div>
 
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-full md:w-fit overflow-x-auto">
+        <button onClick={() => setActiveTab('directory')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${activeTab === 'directory' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'}`}>
+          <Users size={16} /> Personel Listesi
+        </button>
         <button onClick={() => setActiveTab('leave')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${activeTab === 'leave' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'}`}>
           <CalendarCheck size={16} /> İzin Yönetimi
         </button>
@@ -35,6 +45,75 @@ export const Personnel: React.FC = () => {
           <Target size={16} /> Performans
         </button>
       </div>
+
+      {activeTab === 'directory' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-blue-50 rounded-xl p-4">
+              <Users size={20} className="text-blue-600" />
+              <p className="text-2xl font-bold text-gray-900 mt-2">{employeeStats.total}</p>
+              <p className="text-xs text-gray-600 mt-0.5">Aktif Personel</p>
+            </div>
+            <div className="bg-amber-50 rounded-xl p-4">
+              <Building2 size={20} className="text-amber-600" />
+              <p className="text-2xl font-bold text-gray-900 mt-2">{employeeStats.hotels}</p>
+              <p className="text-xs text-gray-600 mt-0.5">Otel</p>
+            </div>
+            <div className="bg-green-50 rounded-xl p-4">
+              <Award size={20} className="text-green-600" />
+              <p className="text-2xl font-bold text-gray-900 mt-2">{employeeStats.managers}</p>
+              <p className="text-xs text-gray-600 mt-0.5">Yönetici</p>
+            </div>
+            <div className="bg-purple-50 rounded-xl p-4">
+              <Target size={20} className="text-purple-600" />
+              <p className="text-2xl font-bold text-gray-900 mt-2">{employeeStats.departments}</p>
+              <p className="text-xs text-gray-600 mt-0.5">Departman/Meslek</p>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Personel</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Otel</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Departman</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Meslek</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Mesai</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Rol</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {hotelEmployees.map((employee) => (
+                    <tr key={employee.id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-[10px] font-bold">
+                            {employee.fullName.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}
+                          </div>
+                          <span className="text-sm font-medium text-gray-900">{employee.fullName}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{employee.property}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{employee.department || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{employee.position || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        {employee.shiftStart || employee.shiftEnd ? `${employee.shiftStart || '-'} - ${employee.shiftEnd || '-'}` : '-'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${employee.isManager ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
+                          {employee.isManager ? 'Yönetici' : 'Personel'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {activeTab === 'leave' && (
         <div className="space-y-4">

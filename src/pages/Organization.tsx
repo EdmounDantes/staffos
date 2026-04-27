@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { mockOrgTree, mockDepartments } from '../data/mockData';
+import { hotelDefinitions, hotelEmployees } from '../data/hotelDefinitions';
 import { ChevronRight, ChevronDown, Building2, Users, Globe, MapPin, Layers, Plus } from 'lucide-react';
-import { OrgNode } from '../types';
+import type { OrgNode } from '../types';
 
 const typeIcons: Record<string, React.ReactNode> = {
   company: <Globe size={16} className="text-indigo-500" />,
@@ -13,6 +13,66 @@ const typeIcons: Record<string, React.ReactNode> = {
   desk: <Layers size={16} className="text-gray-400" />,
   area: <MapPin size={16} className="text-teal-500" />,
 };
+
+interface DepartmentSummary {
+  id: string;
+  name: string;
+  property: string;
+  head: string;
+  employeeCount: number;
+  subDepartmentCount: number;
+  taskDefinitionCount: number;
+}
+
+const definitionOrgTree: OrgNode = {
+  id: 'meroddi-hotels',
+  name: 'Meroddi Hotels',
+  type: 'company',
+  employeeCount: hotelEmployees.length,
+  status: 'active',
+  children: hotelDefinitions.map((hotel): OrgNode => {
+    const propertyEmployees = hotelEmployees.filter((employee) => employee.propertyId === hotel.id);
+
+    return {
+      id: hotel.id,
+      name: hotel.name,
+      type: 'property',
+      employeeCount: propertyEmployees.length,
+      status: 'active',
+      children: hotel.departments
+        .filter((department) => !department.isPassive)
+        .map((department): OrgNode => ({
+          id: `${hotel.id}-${department.id}`,
+          name: department.name,
+          type: 'department',
+          employeeCount: propertyEmployees.filter((employee) => employee.department === department.name).length,
+          status: 'active',
+        })),
+    };
+  }),
+};
+
+const definitionDepartments: DepartmentSummary[] = hotelDefinitions.flatMap((hotel) => (
+  hotel.departments
+    .filter((department) => !department.isPassive)
+    .map((department) => {
+      const departmentEmployees = hotelEmployees.filter((employee) => (
+        employee.propertyId === hotel.id && employee.department === department.name
+      ));
+      const propertyManager = hotelEmployees.find((employee) => employee.propertyId === hotel.id && employee.isManager);
+      const departmentManager = departmentEmployees.find((employee) => employee.isManager);
+
+      return {
+        id: `${hotel.id}-${department.id}`,
+        name: department.name,
+        property: hotel.name,
+        head: departmentManager?.fullName || propertyManager?.fullName || '-',
+        employeeCount: departmentEmployees.length,
+        subDepartmentCount: hotel.subDepartments.filter((subDepartment) => subDepartment.department === department.name).length,
+        taskDefinitionCount: hotel.taskDefinitions.filter((task) => !task.isPassive && task.department === department.name).length,
+      };
+    })
+));
 
 const OrgTreeNode: React.FC<{ node: OrgNode; depth: number }> = ({ node, depth }) => {
   const [expanded, setExpanded] = useState(depth < 2);
@@ -38,7 +98,7 @@ const OrgTreeNode: React.FC<{ node: OrgNode; depth: number }> = ({ node, depth }
             <span className="text-sm font-medium text-gray-900">{node.name}</span>
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{node.type}</span>
           </div>
-          {node.employeeCount && (
+          {node.employeeCount !== undefined && (
             <span className="text-[10px] text-gray-400">{node.employeeCount} personel</span>
           )}
         </div>
@@ -93,15 +153,15 @@ const Organization: React.FC = () => {
               <span className="flex items-center gap-1"><Users size={12} /> Departman</span>
             </div>
           </div>
-          <OrgTreeNode node={mockOrgTree} depth={0} />
+          <OrgTreeNode node={definitionOrgTree} depth={0} />
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {mockDepartments.map(dept => (
+          {definitionDepartments.map(dept => (
             <div key={dept.id} className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow cursor-pointer">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-gray-900">{dept.name}</h3>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-100 text-green-700">{dept.status}</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-100 text-green-700">Aktif</span>
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs">
@@ -114,7 +174,15 @@ const Organization: React.FC = () => {
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-500">Lokasyon</span>
-                  <span className="text-gray-900 font-medium">{dept.location}</span>
+                  <span className="text-gray-900 font-medium">{dept.property}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-500">Alt Departman</span>
+                  <span className="text-gray-900 font-medium">{dept.subDepartmentCount}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-500">Görev Tanımı</span>
+                  <span className="text-gray-900 font-medium">{dept.taskDefinitionCount}</span>
                 </div>
               </div>
             </div>
