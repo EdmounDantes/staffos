@@ -105,13 +105,25 @@ const getTaskLocationProperty = (value: string) => {
   return group?.property.name ?? '';
 };
 
+const formatCommentDate = (value: string) => (
+  new Intl.DateTimeFormat('tr-TR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value))
+);
+
 const WorkItems: React.FC = () => {
-  const { workItems, addWorkItem } = useStore();
+  const { user, workItems, addWorkItem, updateWorkItem } = useStore();
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [showNewForm, setShowNewForm] = useState(false);
   const [newWorkItemForm, setNewWorkItemForm] = useState<NewWorkItemForm>(emptyNewWorkItemForm);
+  const [showCommentForm, setShowCommentForm] = useState(false);
+  const [commentDraft, setCommentDraft] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'assigned' | 'team' | 'escalated' | 'sla'>('all');
   const selectedLocationGroup = taskLocationGroups.find((group) => group.property.id === newWorkItemForm.propertyId);
@@ -244,6 +256,41 @@ const WorkItems: React.FC = () => {
     closeNewWorkItemForm();
   };
 
+  const handleAcceptWorkItem = () => {
+    if (!selectedWI || selectedWI.status !== 'Assigned') return;
+    updateWorkItem(selectedWI.id, { status: 'In Progress' });
+  };
+
+  const handleEscalateWorkItem = () => {
+    if (!selectedWI || selectedWI.status === 'Completed' || selectedWI.status === 'Escalated') return;
+    updateWorkItem(selectedWI.id, { status: 'Escalated' });
+  };
+
+  const handleAddComment = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedWI) return;
+
+    const message = commentDraft.trim();
+    if (!message) return;
+
+    const now = new Date().toISOString();
+    const commentHistory = selectedWI.commentHistory ?? [];
+    updateWorkItem(selectedWI.id, {
+      comments: selectedWI.comments + 1,
+      commentHistory: [
+        ...commentHistory,
+        {
+          id: `${selectedWI.id}-comment-${Date.now()}`,
+          author: user?.name || 'StaffOS Kullanıcısı',
+          message,
+          createdAt: now,
+        },
+      ],
+    });
+    setCommentDraft('');
+    setShowCommentForm(false);
+  };
+
   return (
     <div className="p-6 space-y-4">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -347,7 +394,11 @@ const WorkItems: React.FC = () => {
                 filteredItems.map((item) => (
                   <tr
                     key={item.id}
-                    onClick={() => setSelectedItem(item.id)}
+                    onClick={() => {
+                      setSelectedItem(item.id);
+                      setShowCommentForm(false);
+                      setCommentDraft('');
+                    }}
                     className={`border-b border-gray-100 hover:bg-amber-50/30 cursor-pointer transition-colors ${
                       selectedItem === item.id ? 'bg-amber-50/50' : ''
                     }`}
@@ -390,11 +441,18 @@ const WorkItems: React.FC = () => {
           <div className="flex items-center justify-between p-4 border-b border-gray-200">
             <div className="flex items-center gap-2">
               <span className="font-mono text-sm text-gray-500">{selectedWI.id}</span>
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[selectedWI.status]}`}>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[selectedWI.status] || 'bg-gray-100 text-gray-600'}`}>
                 {statusLabels[selectedWI.status] || selectedWI.status}
               </span>
             </div>
-            <button onClick={() => setSelectedItem(null)} className="p-1 hover:bg-gray-100 rounded">
+            <button
+              onClick={() => {
+                setSelectedItem(null);
+                setShowCommentForm(false);
+                setCommentDraft('');
+              }}
+              className="p-1 hover:bg-gray-100 rounded"
+            >
               <X size={18} className="text-gray-400" />
             </button>
           </div>
@@ -472,13 +530,82 @@ const WorkItems: React.FC = () => {
               <span className="flex items-center gap-1"><ChevronRight size={14} /> {selectedWI.subtasks} alt iş</span>
             </div>
 
+            {selectedWI.commentHistory && selectedWI.commentHistory.length > 0 && (
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-gray-900">Yorumlar</h3>
+                {[...selectedWI.commentHistory].reverse().map((comment) => (
+                  <div key={comment.id} className="p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-gray-700">{comment.author}</p>
+                      <span className="text-[10px] text-gray-400">{formatCommentDate(comment.createdAt)}</span>
+                    </div>
+                    <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{comment.message}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {showCommentForm && (
+              <form onSubmit={handleAddComment} className="p-3 border border-amber-200 bg-amber-50/40 rounded-lg space-y-3">
+                <textarea
+                  value={commentDraft}
+                  onChange={(event) => setCommentDraft(event.target.value)}
+                  className="w-full min-h-24 px-3 py-2 border border-amber-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none bg-white"
+                  placeholder="Yorumunuzu yazın"
+                  autoFocus
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCommentForm(false);
+                      setCommentDraft('');
+                    }}
+                    className="px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-white rounded-lg"
+                  >
+                    İptal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!commentDraft.trim()}
+                    className={`px-3 py-1.5 text-xs font-medium text-white rounded-lg ${
+                      commentDraft.trim()
+                        ? 'bg-amber-500 hover:bg-amber-600'
+                        : 'bg-amber-300 cursor-not-allowed'
+                    }`}
+                  >
+                    Kaydet
+                  </button>
+                </div>
+              </form>
+            )}
+
             <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-200">
               {selectedWI.status === 'Open' && <button className="px-3 py-1.5 bg-blue-500 text-white text-xs font-medium rounded-lg hover:bg-blue-600">Ata</button>}
-              {selectedWI.status === 'Assigned' && <button className="px-3 py-1.5 bg-green-500 text-white text-xs font-medium rounded-lg hover:bg-green-600">Kabul Et</button>}
-              {selectedWI.status !== 'Completed' && <button className="px-3 py-1.5 bg-red-500 text-white text-xs font-medium rounded-lg hover:bg-red-600">Eskale Et</button>}
+              {selectedWI.status === 'Assigned' && (
+                <button
+                  onClick={handleAcceptWorkItem}
+                  className="px-3 py-1.5 bg-green-500 text-white text-xs font-medium rounded-lg hover:bg-green-600"
+                >
+                  Kabul Et
+                </button>
+              )}
+              {selectedWI.status !== 'Completed' && selectedWI.status !== 'Escalated' && (
+                <button
+                  onClick={handleEscalateWorkItem}
+                  className="px-3 py-1.5 bg-red-500 text-white text-xs font-medium rounded-lg hover:bg-red-600"
+                >
+                  Eskale Et
+                </button>
+              )}
               {selectedWI.status === 'In Progress' && <button className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700">Kapat</button>}
               {selectedWI.status === 'Completed' && <button className="px-3 py-1.5 bg-amber-500 text-white text-xs font-medium rounded-lg hover:bg-amber-600">Yeniden Aç</button>}
-              <button className="px-3 py-1.5 bg-gray-200 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-300">Yorum Ekle</button>
+              <button
+                onClick={() => setShowCommentForm((current) => !current)}
+                className="px-3 py-1.5 bg-gray-200 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-300"
+              >
+                Yorum Ekle
+              </button>
             </div>
           </div>
         </div>

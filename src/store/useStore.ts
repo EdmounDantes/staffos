@@ -33,6 +33,7 @@ interface AppState {
   theme: 'light' | 'dark';
   
   addWorkItem: (workItem: WorkItem) => void;
+  updateWorkItem: (id: string, updates: Partial<WorkItem>) => void;
   login: (email: string, password: string) => boolean;
   logout: () => void;
   markNotificationRead: (id: string) => void;
@@ -54,6 +55,18 @@ export const useStore = create<AppState>((set) => ({
   addWorkItem: (workItem: WorkItem) => {
     set((state) => {
       const workItems = [workItem, ...state.workItems];
+      saveStoredWorkItems(workItems);
+      return { workItems };
+    });
+  },
+
+  updateWorkItem: (id: string, updates: Partial<WorkItem>) => {
+    set((state) => {
+      const workItems = state.workItems.map((workItem) => (
+        workItem.id === id
+          ? { ...workItem, ...updates, updatedAt: updates.updatedAt ?? new Date().toISOString() }
+          : workItem
+      ));
       saveStoredWorkItems(workItems);
       return { workItems };
     });

@@ -44,8 +44,16 @@ export interface WorkItem {
   updatedAt: string;
   dueDate: string;
   comments: number;
+  commentHistory?: WorkItemComment[];
   files: number;
   subtasks: number;
+}
+
+export interface WorkItemComment {
+  id: string;
+  author: string;
+  message: string;
+  createdAt: string;
 }
 
 export interface Incident {
